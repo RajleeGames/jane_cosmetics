@@ -1474,79 +1474,302 @@ def reports(request):
 
 @login_required
 def end_day(request):
-    today=timezone.localdate()
-    selected_date=_parse_date(request.GET.get('date'),today)
-    if selected_date>today:
-        selected_date=today
+    today = timezone.localdate()
 
-    is_admin=_is_admin_user(request.user)
-    available_users=User.objects.filter(is_active=True).select_related('profile').order_by('first_name','username') if is_admin else User.objects.filter(pk=request.user.pk)
-    requested_user_id=request.GET.get('cashier') if is_admin else str(request.user.pk)
+    selected_date = _parse_date(
+        request.GET.get('date'),
+        today,
+    )
+
+    if selected_date > today:
+        selected_date = today
+
+    is_admin = _is_admin_user(request.user)
+
+    # -------------------------------------------------------------------------
+    # AVAILABLE CASHIERS
+    # Superusers are intentionally hidden from the End Day cashier dropdown.
+    # This does NOT affect their permissions or ability to access this page.
+    # -------------------------------------------------------------------------
+    if is_admin:
+        available_users = (
+            User.objects
+            .filter(
+                is_active=True,
+                is_superuser=False,
+            )
+            .select_related('profile')
+            .order_by(
+                'first_name',
+                'username',
+            )
+        )
+    else:
+        available_users = (
+            User.objects
+            .filter(pk=request.user.pk)
+            .select_related('profile')
+        )
+
+    # -------------------------------------------------------------------------
+    # SELECTED CASHIER
+    # -------------------------------------------------------------------------
+    requested_user_id = (
+        request.GET.get('cashier')
+        if is_admin
+        else str(request.user.pk)
+    )
+
     try:
-        target=available_users.get(pk=int(requested_user_id)) if requested_user_id else request.user
-    except (ValueError,TypeError,User.DoesNotExist):
-        target=request.user
+        if requested_user_id:
+            target = available_users.get(
+                pk=int(requested_user_id)
+            )
+        else:
+            # Superuser/admin can still access the page normally.
+            # Prefer first visible cashier when no cashier is explicitly chosen.
+            target = (
+                available_users.first()
+                if is_admin
+                else request.user
+            )
 
-    if request.method=='POST':
-        selected_date=_parse_date(request.POST.get('close_date'),today)
-        target=request.user
+            # Safety fallback if there are no normal active users yet.
+            if target is None:
+                target = request.user
+
+    except (
+        ValueError,
+        TypeError,
+        User.DoesNotExist,
+    ):
+        target = (
+            available_users.first()
+            if is_admin
+            else request.user
+        )
+
+        if target is None:
+            target = request.user
+
+    # -------------------------------------------------------------------------
+    # SAVE END DAY
+    # -------------------------------------------------------------------------
+    if request.method == 'POST':
+        selected_date = _parse_date(
+            request.POST.get('close_date'),
+            today,
+        )
+
+        if selected_date > today:
+            selected_date = today
+
+        target = request.user
+
         if is_admin:
             try:
-                target=User.objects.get(pk=int(request.POST.get('cashier_id') or request.user.pk))
-            except (ValueError,TypeError,User.DoesNotExist):
-                target=request.user
+                cashier_id = int(
+                    request.POST.get('cashier_id') or 0
+                )
+
+                # Use available_users instead of User.objects.get().
+                # This prevents a hidden superuser from being selected manually
+                # through a modified POST request.
+                target = available_users.get(
+                    pk=cashier_id
+                )
+
+            except (
+                ValueError,
+                TypeError,
+                User.DoesNotExist,
+            ):
+                # If the logged-in account itself is not a visible cashier
+                # (for example, a superuser), fall back to the first normal user.
+                target = available_users.first()
+
+                if target is None:
+                    target = request.user
+
         try:
-            closing=close_cash_day(
+            closing = close_cash_day(
                 cashier=target,
                 close_date=selected_date,
-                opening_float=request.POST.get('opening_float','0'),
-                cash_paid_out=request.POST.get('cash_paid_out','0'),
-                counted_cash=request.POST.get('counted_cash','0'),
-                notes=request.POST.get('notes',''),
+                opening_float=request.POST.get(
+                    'opening_float',
+                    '0',
+                ),
+                cash_paid_out=request.POST.get(
+                    'cash_paid_out',
+                    '0',
+                ),
+                counted_cash=request.POST.get(
+                    'counted_cash',
+                    '0',
+                ),
+                notes=request.POST.get(
+                    'notes',
+                    '',
+                ),
                 user=request.user,
             )
-            messages.success(request,f'{closing.reference} saved. Difference: {_money_text(closing.difference)} TZS.')
-            return redirect(f"{request.path}?date={selected_date.isoformat()}&cashier={target.id}")
-        except StockError as exc:
-            messages.error(request,str(exc))
 
-    live=calculate_cash_closing_snapshot(cashier=target,close_date=selected_date)
-    live['sales_total']=live['cash_sales']+live['mobile_money_sales']+live['bank_sales']+live['debt_sales']
-    live['debt_collected_total']=live['debt_cash_collected']+live['debt_mobile_collected']+live['debt_bank_collected']
-    base_cash=live['cash_sales']+live['debt_cash_collected']
-    existing=CashClosing.objects.filter(cashier=target,close_date=selected_date).select_related('closed_by','amended_by').first()
-    summary=dict(live)
+            messages.success(
+                request,
+                (
+                    f'{closing.reference} saved. '
+                    f'Difference: '
+                    f'{_money_text(closing.difference)} TZS.'
+                ),
+            )
+
+            return redirect(
+                f"{request.path}"
+                f"?date={selected_date.isoformat()}"
+                f"&cashier={target.id}"
+            )
+
+        except StockError as exc:
+            messages.error(
+                request,
+                str(exc),
+            )
+
+    # -------------------------------------------------------------------------
+    # LIVE CASH CLOSING SNAPSHOT
+    # -------------------------------------------------------------------------
+    live = calculate_cash_closing_snapshot(
+        cashier=target,
+        close_date=selected_date,
+    )
+
+    live['sales_total'] = (
+        live['cash_sales']
+        + live['mobile_money_sales']
+        + live['bank_sales']
+        + live['debt_sales']
+    )
+
+    live['debt_collected_total'] = (
+        live['debt_cash_collected']
+        + live['debt_mobile_collected']
+        + live['debt_bank_collected']
+    )
+
+    base_cash = (
+        live['cash_sales']
+        + live['debt_cash_collected']
+    )
+
+    # -------------------------------------------------------------------------
+    # EXISTING CLOSING
+    # -------------------------------------------------------------------------
+    existing = (
+        CashClosing.objects
+        .filter(
+            cashier=target,
+            close_date=selected_date,
+        )
+        .select_related(
+            'closed_by',
+            'amended_by',
+        )
+        .first()
+    )
+
+    summary = dict(live)
+
     if existing:
         summary.update({
-            'cash_sales':existing.cash_sales,
-            'mobile_money_sales':existing.mobile_money_sales,
-            'bank_sales':existing.bank_sales,
-            'debt_sales':existing.debt_sales,
-            'debt_cash_collected':existing.debt_cash_collected,
-            'debt_mobile_collected':existing.debt_mobile_collected,
-            'debt_bank_collected':existing.debt_bank_collected,
-            'sale_count':existing.sale_count,
-            'payment_count':existing.debt_payment_count,
-            'sales_total':existing.sales_total,
-            'debt_collected_total':existing.debt_collected_total,
+            'cash_sales':
+                existing.cash_sales,
+
+            'mobile_money_sales':
+                existing.mobile_money_sales,
+
+            'bank_sales':
+                existing.bank_sales,
+
+            'debt_sales':
+                existing.debt_sales,
+
+            'debt_cash_collected':
+                existing.debt_cash_collected,
+
+            'debt_mobile_collected':
+                existing.debt_mobile_collected,
+
+            'debt_bank_collected':
+                existing.debt_bank_collected,
+
+            'sale_count':
+                existing.sale_count,
+
+            'payment_count':
+                existing.debt_payment_count,
+
+            'sales_total':
+                existing.sales_total,
+
+            'debt_collected_total':
+                existing.debt_collected_total,
         })
-    history=CashClosing.objects.select_related('cashier','closed_by','amended_by')
+
+    # -------------------------------------------------------------------------
+    # CLOSING HISTORY
+    # -------------------------------------------------------------------------
+    history = (
+        CashClosing.objects
+        .select_related(
+            'cashier',
+            'closed_by',
+            'amended_by',
+        )
+    )
+
     if not is_admin:
-        history=history.filter(cashier=request.user)
+        history = history.filter(
+            cashier=request.user
+        )
 
-    return render(request,'end_day.html',{
-        'selected_date':selected_date,
-        'today':today,
-        'target_cashier':target,
-        'available_users':available_users,
-        'is_admin_view':is_admin,
-        'live':live,
-        'summary':summary,
-        'base_cash':base_cash,
-        'existing':existing,
-        'history':history[:40],
-    })
+    # -------------------------------------------------------------------------
+    # RENDER
+    # -------------------------------------------------------------------------
+    return render(
+        request,
+        'end_day.html',
+        {
+            'selected_date':
+                selected_date,
 
+            'today':
+                today,
+
+            'target_cashier':
+                target,
+
+            'available_users':
+                available_users,
+
+            'is_admin_view':
+                is_admin,
+
+            'live':
+                live,
+
+            'summary':
+                summary,
+
+            'base_cash':
+                base_cash,
+
+            'existing':
+                existing,
+
+            'history':
+                history[:40],
+        },
+    )
 
 @admin_required
 @require_POST
@@ -1761,12 +1984,26 @@ def backup_download(request):
 # Users
 # -----------------------------------------------------------------------------
 
+# -----------------------------------------------------------------------------
+# Users
+# -----------------------------------------------------------------------------
+
 @admin_required
 def users(request):
-    return render(request, 'users.html', {
-        'users': User.objects.select_related('profile').order_by('username')
-    })
+    users_list = (
+        User.objects
+        .filter(is_superuser=False)
+        .select_related('profile')
+        .order_by('username')
+    )
 
+    return render(
+        request,
+        'users.html',
+        {
+            'users': users_list,
+        }
+    )
 
 @admin_required
 def user_create(request):
