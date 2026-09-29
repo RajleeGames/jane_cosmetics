@@ -3864,3 +3864,119 @@ canvas{
         align-items:flex-start;
     }
 }
+
+/* ========================================================================== */
+/* STOCK CONTROL SEARCH                                                       */
+/* ========================================================================== */
+
+.stock-search-bar{
+    width:100%;
+    margin:0 0 12px;
+}
+
+.stock-search-form{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) auto auto;
+    gap:7px;
+    align-items:center;
+    width:100%;
+    padding:9px;
+    border:1px solid var(--line);
+    border-radius:9px;
+    background:#fff;
+}
+
+.stock-search-field{
+    min-width:0;
+}
+
+.stock-search-field .form-control{
+    width:100%;
+    min-width:0;
+    height:38px;
+    margin:0;
+    border-radius:7px;
+}
+
+.stock-search-btn,
+.stock-clear-btn{
+    min-width:78px;
+    height:38px;
+    padding:0 14px;
+    white-space:nowrap;
+}
+
+.stock-search-result{
+    margin-top:6px;
+    padding:0 3px;
+    color:#858a91;
+    font-size:9px;
+    line-height:1.4;
+}
+
+.stock-search-result strong{
+    color:#36393e;
+    font-weight:600;
+}
+
+
+/* Tablet */
+
+@media(max-width:800px){
+
+    .stock-search-form{
+        grid-template-columns:minmax(0,1fr) auto auto;
+    }
+
+}
+
+
+/* Phones */
+
+@media(max-width:600px){
+
+    .stock-search-form{
+        grid-template-columns:1fr 1fr;
+        padding:8px;
+    }
+
+    .stock-search-field{
+        grid-column:1 / -1;
+    }
+
+    .stock-search-field .form-control{
+        height:37px;
+        font-size:10px;
+    }
+
+    .stock-search-btn,
+    .stock-clear-btn{
+        width:100%;
+        min-width:0;
+        height:35px;
+        padding:0 9px;
+        font-size:9px;
+    }
+
+    .stock-search-btn:only-of-type{
+        grid-column:1 / -1;
+    }
+
+}
+
+
+/* Very small phones */
+
+@media(max-width:380px){
+
+    .stock-search-form{
+        grid-template-columns:1fr;
+    }
+
+    .stock-search-field,
+    .stock-search-btn,
+    .stock-clear-btn{
+        grid-column:1;
+    }
+
+}

@@ -5,16 +5,24 @@
 
 {% block content %}
 
+<!-- ========================================================= -->
+<!-- PAGE HEADER                                               -->
+<!-- ========================================================= -->
+
 <div class="page-head">
+
     <div>
         <h1>Stock control</h1>
+
         <p>
             Monitor quantities, buying prices,
             stock value and FIFO batches.
         </p>
     </div>
 
+
     <div class="head-actions">
+
         <a
             class="btn btn-secondary"
             href="{% url 'stocktakes' %}"
@@ -35,161 +43,289 @@
         >
             Opening stock
         </a>
+
     </div>
+
 </div>
 
 
 <!-- ========================================================= -->
-<!-- PRODUCT STOCK SUMMARY                                     -->
+<!-- SEARCH                                                    -->
+<!-- ========================================================= -->
+
+<section class="stock-search-bar">
+
+    <form
+        method="get"
+        action="{% url 'stock' %}"
+        class="stock-search-form"
+    >
+
+        <div class="stock-search-field">
+
+            <input
+                type="search"
+                name="q"
+                value="{{ q }}"
+                class="form-control"
+                placeholder="Search product or category..."
+                autocomplete="off"
+                aria-label="Search stock"
+            >
+
+        </div>
+
+
+        <button
+            type="submit"
+            class="btn btn-primary stock-search-btn"
+        >
+            Search
+        </button>
+
+
+        {% if q %}
+
+            <a
+                href="{% url 'stock' %}"
+                class="btn btn-secondary stock-clear-btn"
+            >
+                Clear
+            </a>
+
+        {% endif %}
+
+    </form>
+
+
+    {% if q %}
+
+        <div class="stock-search-result">
+
+            Showing results for
+
+            <strong>
+                "{{ q }}"
+            </strong>
+
+        </div>
+
+    {% endif %}
+
+</section>
+
+
+<!-- ========================================================= -->
+<!-- CURRENT STOCK                                             -->
 <!-- ========================================================= -->
 
 <section class="card stock-control-card">
 
     <div class="card-head">
+
         <div>
             <h2>Current stock</h2>
+
             <p>
-                Buying price is the weighted FIFO cost
-                of the stock currently remaining.
+                View available quantity, current buying cost
+                and total stock value.
             </p>
         </div>
+
     </div>
 
+
     <div class="table-wrap">
+
         <table class="stock-main-table">
 
             <thead>
+
                 <tr>
                     <th>Product</th>
+
                     <th>Category</th>
+
                     <th>Available</th>
+
                     <th>Avg buying</th>
+
                     <th>Stock value</th>
+
                     <th>Alert</th>
+
                     <th>Status</th>
+
                     <th class="align-right">
                         Action
                     </th>
                 </tr>
+
             </thead>
+
 
             <tbody>
 
                 {% for p in products %}
 
-                <tr>
+                    <tr>
 
-                    <td>
-                        <span class="table-primary">
-                            {{ p.name }}
-                        </span>
+                        <!-- PRODUCT -->
+                        <td>
 
-                        <small class="cell-sub">
-                            Base unit:
+                            <span class="table-primary">
+                                {{ p.name }}
+                            </span>
+
+                            <small class="cell-sub">
+                                Base unit:
+                                {{ p.base_unit }}
+                            </small>
+
+                        </td>
+
+
+                        <!-- CATEGORY -->
+                        <td>
+                            {{ p.category.name }}
+                        </td>
+
+
+                        <!-- AVAILABLE STOCK -->
+                        <td>
+
+                            <strong>
+                                {{ p.current_stock_qty|qty }}
+                            </strong>
+
                             {{ p.base_unit }}
-                        </small>
-                    </td>
 
-                    <td>
-                        {{ p.category.name }}
-                    </td>
+                        </td>
 
-                    <td>
-                        <strong>
-                            {{ p.current_stock_qty|qty }}
-                        </strong>
-                        {{ p.base_unit }}
-                    </td>
 
-                    <td>
-                        {% if p.current_stock_qty > 0 %}
+                        <!-- AVERAGE BUYING COST -->
+                        <td>
 
-                            <strong class="stock-cost-number">
-                                {{ p.average_buying_cost|money }}
+                            {% if p.current_stock_qty > 0 %}
+
+                                <strong class="stock-cost-number">
+                                    {{ p.average_buying_cost|money }}
+                                </strong>
+
+                                <small class="cell-sub">
+                                    TZS / {{ p.base_unit }}
+                                </small>
+
+                            {% else %}
+
+                                <span class="muted-text">
+                                    —
+                                </span>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <!-- STOCK VALUE -->
+                        <td>
+
+                            <strong>
+                                {{ p.current_stock_value|money }}
                             </strong>
 
                             <small class="cell-sub">
-                                TZS / {{ p.base_unit }}
+                                TZS
                             </small>
 
-                        {% else %}
+                        </td>
 
-                            <span class="muted-text">
-                                —
-                            </span>
 
-                        {% endif %}
-                    </td>
+                        <!-- ALERT LEVEL -->
+                        <td>
 
-                    <td>
-                        <strong>
-                            {{ p.current_stock_value|money }}
-                        </strong>
-                        TZS
-                    </td>
+                            {{ p.low_stock_level|qty }}
 
-                    <td>
-                        {{ p.low_stock_level|qty }}
-                        {{ p.base_unit }}
-                    </td>
+                            {{ p.base_unit }}
 
-                    <td>
+                        </td>
 
-                        {% if p.current_stock_qty <= 0 %}
 
-                            <span class="badge low">
-                                Out
-                            </span>
+                        <!-- STATUS -->
+                        <td>
 
-                        {% elif p.current_is_low_stock %}
+                            {% if p.current_stock_qty <= 0 %}
 
-                            <span class="badge low">
-                                Low
-                            </span>
+                                <span class="badge low">
+                                    Out
+                                </span>
 
-                        {% else %}
+                            {% elif p.current_is_low_stock %}
 
-                            <span class="badge completed">
-                                OK
-                            </span>
+                                <span class="badge low">
+                                    Low
+                                </span>
 
-                        {% endif %}
+                            {% else %}
 
-                    </td>
+                                <span class="badge completed">
+                                    OK
+                                </span>
 
-                    <td class="align-right">
+                            {% endif %}
 
-                        <div class="row-actions">
+                        </td>
 
-                            <a
-                                href="{% url 'stock_detail' p.id %}"
-                                class="btn btn-secondary btn-sm"
-                            >
-                                Details
-                            </a>
 
-                        </div>
+                        <!-- ACTION -->
+                        <td class="align-right">
 
-                    </td>
+                            <div class="row-actions">
 
-                </tr>
+                                <a
+                                    href="{% url 'stock_detail' p.id %}"
+                                    class="btn btn-secondary btn-sm"
+                                >
+                                    Details
+                                </a>
+
+                            </div>
+
+                        </td>
+
+                    </tr>
+
 
                 {% empty %}
 
-                <tr>
-                    <td
-                        colspan="8"
-                        class="empty"
-                    >
-                        No products yet.
-                    </td>
-                </tr>
+                    <tr>
+
+                        <td
+                            colspan="8"
+                            class="empty"
+                        >
+
+                            {% if q %}
+
+                                No stock products found for
+                                "<strong>{{ q }}</strong>".
+
+                            {% else %}
+
+                                No products yet.
+
+                            {% endif %}
+
+                        </td>
+
+                    </tr>
 
                 {% endfor %}
 
             </tbody>
 
         </table>
+
     </div>
 
 </section>
@@ -202,136 +338,203 @@
 <section class="card section-gap">
 
     <div class="card-head">
+
         <div>
+
             <h2>Active FIFO batches</h2>
 
             <p>
                 Each receipt keeps its own buying price.
                 Older stock is consumed first.
             </p>
+
         </div>
+
     </div>
+
 
     <div class="table-wrap">
 
         <table>
 
             <thead>
+
                 <tr>
+
                     <th>Received</th>
+
                     <th>Product</th>
+
                     <th>Source</th>
+
                     <th>Remaining</th>
+
                     <th>Buying price</th>
+
                     <th>Remaining value</th>
+
                     <th>Reference</th>
+
                     <th class="align-right">
                         Action
                     </th>
+
                 </tr>
+
             </thead>
+
 
             <tbody>
 
                 {% for b in batches %}
 
-                <tr>
+                    <tr>
 
-                    <td>
-                        {{ b.received_at|date:'d M Y' }}
+                        <!-- RECEIVED -->
+                        <td>
 
-                        <small class="cell-sub">
-                            {{ b.received_at|date:'H:i' }}
-                        </small>
-                    </td>
+                            {{ b.received_at|date:'d M Y' }}
 
-                    <td>
-                        <a
-                            href="{% url 'stock_detail' b.product.id %}"
-                            class="table-primary stock-product-link"
-                        >
-                            {{ b.product.name }}
-                        </a>
-                    </td>
+                            <small class="cell-sub">
+                                {{ b.received_at|date:'H:i' }}
+                            </small>
 
-                    <td>
-                        {{ b.get_source_display }}
-                    </td>
+                        </td>
 
-                    <td>
-                        <strong>
-                            {{ b.quantity_remaining_base|qty }}
-                        </strong>
 
-                        {{ b.product.base_unit }}
-                    </td>
-
-                    <td>
-                        <strong class="stock-cost-number">
-                            {{ b.display_buying_price|money }}
-                        </strong>
-
-                        <small class="cell-sub">
-                            TZS / {{ b.display_buying_unit }}
-                        </small>
-                    </td>
-
-                    <td>
-                        {{ b.remaining_value|money }}
-                        TZS
-                    </td>
-
-                    <td>
-                        {{ b.reference|default:'-' }}
-                    </td>
-
-                    <td class="align-right">
-
-                        <div class="row-actions">
+                        <!-- PRODUCT -->
+                        <td>
 
                             <a
-                                class="btn btn-secondary btn-sm"
                                 href="{% url 'stock_detail' b.product.id %}"
+                                class="table-primary stock-product-link"
                             >
-                                View
+                                {{ b.product.name }}
                             </a>
 
-                            {% if b.can_edit_cost %}
+                        </td>
+
+
+                        <!-- SOURCE -->
+                        <td>
+
+                            {{ b.get_source_display }}
+
+                        </td>
+
+
+                        <!-- REMAINING -->
+                        <td>
+
+                            <strong>
+                                {{ b.quantity_remaining_base|qty }}
+                            </strong>
+
+                            {{ b.product.base_unit }}
+
+                        </td>
+
+
+                        <!-- BUYING PRICE -->
+                        <td>
+
+                            <strong class="stock-cost-number">
+                                {{ b.display_buying_price|money }}
+                            </strong>
+
+                            <small class="cell-sub">
+                                TZS /
+                                {{ b.display_buying_unit }}
+                            </small>
+
+                        </td>
+
+
+                        <!-- VALUE -->
+                        <td>
+
+                            <strong>
+                                {{ b.remaining_value|money }}
+                            </strong>
+
+                            <small class="cell-sub">
+                                TZS
+                            </small>
+
+                        </td>
+
+
+                        <!-- REFERENCE -->
+                        <td>
+
+                            {{ b.reference|default:'-' }}
+
+                        </td>
+
+
+                        <!-- ACTION -->
+                        <td class="align-right">
+
+                            <div class="row-actions">
 
                                 <a
                                     class="btn btn-secondary btn-sm"
-                                    href="{% url 'stock_batch_cost_edit' b.id %}"
+                                    href="{% url 'stock_detail' b.product.id %}"
                                 >
-                                    Edit price
+                                    View
                                 </a>
 
-                            {% else %}
 
-                                <span
-                                    class="stock-cost-locked"
-                                    title="This batch has already been used"
-                                >
-                                    Locked
-                                </span>
+                                {% if b.can_edit_cost %}
 
-                            {% endif %}
+                                    <a
+                                        class="btn btn-secondary btn-sm"
+                                        href="{% url 'stock_batch_cost_edit' b.id %}"
+                                    >
+                                        Edit price
+                                    </a>
 
-                        </div>
+                                {% else %}
 
-                    </td>
+                                    <span
+                                        class="stock-cost-locked"
+                                        title="Buying price is locked because stock from this batch has already been used."
+                                    >
+                                        Locked
+                                    </span>
 
-                </tr>
+                                {% endif %}
+
+                            </div>
+
+                        </td>
+
+                    </tr>
+
 
                 {% empty %}
 
-                <tr>
-                    <td
-                        colspan="8"
-                        class="empty"
-                    >
-                        No active stock batches.
-                    </td>
-                </tr>
+                    <tr>
+
+                        <td
+                            colspan="8"
+                            class="empty"
+                        >
+
+                            {% if q %}
+
+                                No active FIFO batches found
+                                for "{{ q }}".
+
+                            {% else %}
+
+                                No active stock batches.
+
+                            {% endif %}
+
+                        </td>
+
+                    </tr>
 
                 {% endfor %}
 
@@ -345,7 +548,7 @@
 
 
 <!-- ========================================================= -->
-<!-- ADJUSTMENTS                                               -->
+<!-- RECENT STOCK ADJUSTMENTS                                  -->
 <!-- ========================================================= -->
 
 <section class="card section-gap">
@@ -353,79 +556,142 @@
     <div class="card-head">
 
         <div>
+
             <h2>Recent adjustments</h2>
 
             <p>
                 Spoilage, corrections, loss and manual
                 additions remain visible as audit history.
             </p>
+
         </div>
 
     </div>
+
 
     <div class="table-wrap">
 
         <table>
 
             <thead>
+
                 <tr>
+
                     <th>Date</th>
+
                     <th>Product</th>
+
                     <th>Type</th>
+
                     <th>Quantity</th>
+
                     <th>Reason</th>
+
                     <th>User</th>
+
                 </tr>
+
             </thead>
+
 
             <tbody>
 
                 {% for a in adjustments %}
 
-                <tr>
+                    <tr>
 
-                    <td>
-                        {{ a.created_at|date:'d M Y H:i' }}
-                    </td>
+                        <!-- DATE -->
+                        <td>
 
-                    <td>
-                        <a
-                            class="table-primary"
-                            href="{% url 'stock_detail' a.product.id %}"
-                        >
-                            {{ a.product.name }}
-                        </a>
-                    </td>
+                            {{ a.created_at|date:'d M Y H:i' }}
 
-                    <td>
-                        {{ a.get_adjustment_type_display }}
-                    </td>
+                        </td>
 
-                    <td>
-                        {{ a.quantity_base|qty }}
-                        {{ a.product.base_unit }}
-                    </td>
 
-                    <td>
-                        {{ a.reason }}
-                    </td>
+                        <!-- PRODUCT -->
+                        <td>
 
-                    <td>
-                        {{ a.created_by.username }}
-                    </td>
+                            <a
+                                class="table-primary stock-product-link"
+                                href="{% url 'stock_detail' a.product.id %}"
+                            >
+                                {{ a.product.name }}
+                            </a>
 
-                </tr>
+                        </td>
+
+
+                        <!-- TYPE -->
+                        <td>
+
+                            {% if a.adjustment_type == 'increase' %}
+
+                                <span class="badge completed">
+                                    {{ a.get_adjustment_type_display }}
+                                </span>
+
+                            {% else %}
+
+                                <span class="badge low">
+                                    {{ a.get_adjustment_type_display }}
+                                </span>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <!-- QUANTITY -->
+                        <td>
+
+                            {{ a.quantity_base|qty }}
+
+                            {{ a.product.base_unit }}
+
+                        </td>
+
+
+                        <!-- REASON -->
+                        <td>
+
+                            {{ a.reason }}
+
+                        </td>
+
+
+                        <!-- USER -->
+                        <td>
+
+                            {{ a.created_by.username }}
+
+                        </td>
+
+                    </tr>
+
 
                 {% empty %}
 
-                <tr>
-                    <td
-                        colspan="6"
-                        class="empty"
-                    >
-                        No adjustments yet.
-                    </td>
-                </tr>
+                    <tr>
+
+                        <td
+                            colspan="6"
+                            class="empty"
+                        >
+
+                            {% if q %}
+
+                                No stock adjustments found
+                                for "{{ q }}".
+
+                            {% else %}
+
+                                No adjustments yet.
+
+                            {% endif %}
+
+                        </td>
+
+                    </tr>
 
                 {% endfor %}
 

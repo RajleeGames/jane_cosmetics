@@ -1227,28 +1227,27 @@ def customer_payment_void(request,pk):
 
 @admin_required
 def stock(request):
-    """
-    Main stock-control screen.
+    q = request.GET.get('q', '').strip()
 
-    Shows:
-    - current stock quantity
-    - current FIFO stock value
-    - weighted average buying cost per base unit
-    - low-stock status
-    - active FIFO batches
-
-    The actual FIFO batches remain the source of truth for buying cost.
-    """
-
-    products_qs = list(
+    products_qs = (
         Product.objects
         .select_related('category')
         .prefetch_related('batches')
         .order_by('name')
     )
 
+    if q:
+        products_qs = products_qs.filter(
+            Q(name__icontains=q)
+            | Q(category__name__icontains=q)
+        )
+
+    products_qs = list(products_qs)
+
     for product in products_qs:
-        product_batches = list(product.batches.all())
+        product_batches = list(
+            product.batches.all()
+        )
 
         current_qty = sum(
             (
@@ -1260,27 +1259,30 @@ def stock(request):
 
         current_value = sum(
             (
-                batch.quantity_remaining_base * batch.unit_cost_base
+                batch.quantity_remaining_base
+                * batch.unit_cost_base
                 for batch in product_batches
             ),
             Decimal('0'),
         )
 
         if current_qty > 0:
-            average_cost = current_value / current_qty
+            average_cost = (
+                current_value / current_qty
+            )
         else:
             average_cost = Decimal('0')
 
-        # Temporary display attributes.
-        # No database fields/migration are required.
         product.current_stock_qty = current_qty
         product.current_stock_value = current_value
         product.average_buying_cost = average_cost
+
         product.current_is_low_stock = (
-            current_qty <= product.low_stock_level
+            current_qty
+            <= product.low_stock_level
         )
 
-    active_batches = list(
+    batch_qs = (
         StockBatch.objects
         .select_related(
             'product',
@@ -1288,13 +1290,31 @@ def stock(request):
             'purchase_item__unit',
             'purchase_item__purchase',
         )
-        .prefetch_related('sale_allocations')
-        .filter(quantity_remaining_base__gt=0)
-        .order_by('received_at', 'id')[:100]
+        .prefetch_related(
+            'sale_allocations'
+        )
+        .filter(
+            quantity_remaining_base__gt=0
+        )
+    )
+
+    if q:
+        batch_qs = batch_qs.filter(
+            Q(product__name__icontains=q)
+            | Q(product__category__name__icontains=q)
+        )
+
+    active_batches = list(
+        batch_qs.order_by(
+            'received_at',
+            'id',
+        )[:100]
     )
 
     for batch in active_batches:
-        allocations = list(batch.sale_allocations.all())
+        allocations = list(
+            batch.sale_allocations.all()
+        )
 
         batch.can_edit_cost = (
             batch.quantity_remaining_base
@@ -1310,29 +1330,49 @@ def stock(request):
         if batch.purchase_item_id:
             item = batch.purchase_item
 
-            # This is the buying price exactly as entered
-            # when receiving the purchase.
-            batch.display_buying_price = item.cost_per_unit
-            batch.display_buying_unit = item.unit.symbol
+            batch.display_buying_price = (
+                item.cost_per_unit
+            )
+
+            batch.display_buying_unit = (
+                item.unit.symbol
+            )
+
         else:
-            # Opening stock / manual stock increase is stored
-            # directly as cost per base unit.
-            batch.display_buying_price = batch.unit_cost_base
-            batch.display_buying_unit = batch.product.base_unit
+            batch.display_buying_price = (
+                batch.unit_cost_base
+            )
+
+            batch.display_buying_unit = (
+                batch.product.base_unit
+            )
+
+    adjustments_qs = (
+        StockAdjustment.objects
+        .select_related(
+            'product',
+            'created_by',
+        )
+    )
+
+    if q:
+        adjustments_qs = (
+            adjustments_qs.filter(
+                Q(product__name__icontains=q)
+                | Q(
+                    product__category__name__icontains=q
+                )
+            )
+        )
 
     return render(
         request,
         'stock.html',
         {
             'products': products_qs,
-            'adjustments': (
-                StockAdjustment.objects
-                .select_related(
-                    'product',
-                    'created_by',
-                )[:10]
-            ),
+            'adjustments': adjustments_qs[:10],
             'batches': active_batches,
+            'q': q,
         },
     )
 
