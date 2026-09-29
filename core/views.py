@@ -7,7 +7,7 @@ import sqlite3
 import tempfile
 import zipfile
 from datetime import datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from Crypto.Hash import SHA512
@@ -1221,21 +1221,663 @@ def customer_payment_void(request,pk):
         messages.error(request,str(exc))
     return redirect('customer_detail',pk=customer_id)
 
-
 # -----------------------------------------------------------------------------
 # Stock / FIFO
 # -----------------------------------------------------------------------------
 
 @admin_required
 def stock(request):
-    products_qs = Product.objects.select_related('category').prefetch_related('batches')
-    return render(request, 'stock.html', {
-        'products': products_qs,
-        'adjustments': StockAdjustment.objects.select_related('product', 'created_by')[:10],
-        'batches': StockBatch.objects.select_related('product').filter(
-            quantity_remaining_base__gt=0
-        ).order_by('received_at', 'id')[:100],
-    })
+    """
+    Main stock-control screen.
+
+    Shows:
+    - current stock quantity
+    - current FIFO stock value
+    - weighted average buying cost per base unit
+    - low-stock status
+    - active FIFO batches
+
+    The actual FIFO batches remain the source of truth for buying cost.
+    """
+
+    products_qs = list(
+        Product.objects
+        .select_related('category')
+        .prefetch_related('batches')
+        .order_by('name')
+    )
+
+    for product in products_qs:
+        product_batches = list(product.batches.all())
+
+        current_qty = sum(
+            (
+                batch.quantity_remaining_base
+                for batch in product_batches
+            ),
+            Decimal('0'),
+        )
+
+        current_value = sum(
+            (
+                batch.quantity_remaining_base * batch.unit_cost_base
+                for batch in product_batches
+            ),
+            Decimal('0'),
+        )
+
+        if current_qty > 0:
+            average_cost = current_value / current_qty
+        else:
+            average_cost = Decimal('0')
+
+        # Temporary display attributes.
+        # No database fields/migration are required.
+        product.current_stock_qty = current_qty
+        product.current_stock_value = current_value
+        product.average_buying_cost = average_cost
+        product.current_is_low_stock = (
+            current_qty <= product.low_stock_level
+        )
+
+    active_batches = list(
+        StockBatch.objects
+        .select_related(
+            'product',
+            'purchase_item',
+            'purchase_item__unit',
+            'purchase_item__purchase',
+        )
+        .prefetch_related('sale_allocations')
+        .filter(quantity_remaining_base__gt=0)
+        .order_by('received_at', 'id')[:100]
+    )
+
+    for batch in active_batches:
+        allocations = list(batch.sale_allocations.all())
+
+        batch.can_edit_cost = (
+            batch.quantity_remaining_base
+            == batch.quantity_received_base
+            and not allocations
+        )
+
+        batch.remaining_value = (
+            batch.quantity_remaining_base
+            * batch.unit_cost_base
+        )
+
+        if batch.purchase_item_id:
+            item = batch.purchase_item
+
+            # This is the buying price exactly as entered
+            # when receiving the purchase.
+            batch.display_buying_price = item.cost_per_unit
+            batch.display_buying_unit = item.unit.symbol
+        else:
+            # Opening stock / manual stock increase is stored
+            # directly as cost per base unit.
+            batch.display_buying_price = batch.unit_cost_base
+            batch.display_buying_unit = batch.product.base_unit
+
+    return render(
+        request,
+        'stock.html',
+        {
+            'products': products_qs,
+            'adjustments': (
+                StockAdjustment.objects
+                .select_related(
+                    'product',
+                    'created_by',
+                )[:10]
+            ),
+            'batches': active_batches,
+        },
+    )
+
+
+@admin_required
+def stock_detail(request, pk):
+    """
+    Detailed stock page for one product.
+
+    Displays all FIFO batches including fully used batches,
+    buying prices, remaining quantities and values.
+    """
+
+    product = get_object_or_404(
+        Product.objects
+        .select_related('category')
+        .prefetch_related('selling_units'),
+        pk=pk,
+    )
+
+    batches = list(
+        StockBatch.objects
+        .filter(product=product)
+        .select_related(
+            'purchase_item',
+            'purchase_item__unit',
+            'purchase_item__purchase',
+            'created_by',
+        )
+        .prefetch_related('sale_allocations')
+        .order_by('-received_at', '-id')
+    )
+
+    current_qty = Decimal('0')
+    current_value = Decimal('0')
+
+    for batch in batches:
+        allocations = list(batch.sale_allocations.all())
+
+        batch.used_quantity = (
+            batch.quantity_received_base
+            - batch.quantity_remaining_base
+        )
+
+        batch.remaining_value = (
+            batch.quantity_remaining_base
+            * batch.unit_cost_base
+        )
+
+        batch.original_value = (
+            batch.quantity_received_base
+            * batch.unit_cost_base
+        )
+
+        current_qty += batch.quantity_remaining_base
+        current_value += batch.remaining_value
+
+        batch.can_edit_cost = (
+            batch.quantity_remaining_base
+            == batch.quantity_received_base
+            and not allocations
+        )
+
+        batch.has_history = bool(
+            allocations
+            or (
+                batch.quantity_remaining_base
+                != batch.quantity_received_base
+            )
+        )
+
+        if batch.purchase_item_id:
+            item = batch.purchase_item
+
+            batch.display_buying_price = (
+                item.cost_per_unit
+            )
+            batch.display_buying_unit = (
+                item.unit.symbol
+            )
+
+            batch.received_display_qty = (
+                item.quantity
+            )
+            batch.received_display_unit = (
+                item.unit.symbol
+            )
+
+            batch.purchase_reference = (
+                f'PUR-{item.purchase_id:05d}'
+            )
+
+        else:
+            batch.display_buying_price = (
+                batch.unit_cost_base
+            )
+            batch.display_buying_unit = (
+                product.base_unit
+            )
+
+            batch.received_display_qty = (
+                batch.quantity_received_base
+            )
+            batch.received_display_unit = (
+                product.base_unit
+            )
+
+            batch.purchase_reference = '-'
+
+    average_buying_cost = Decimal('0')
+
+    if current_qty > 0:
+        average_buying_cost = (
+            current_value / current_qty
+        )
+
+    selling_units = (
+        product.selling_units
+        .filter(is_active=True)
+        .order_by('conversion_to_base')
+    )
+
+    return render(
+        request,
+        'stock_detail.html',
+        {
+            'product': product,
+            'batches': batches,
+            'selling_units': selling_units,
+            'current_qty': current_qty,
+            'current_value': current_value,
+            'average_buying_cost': average_buying_cost,
+        },
+    )
+
+
+@admin_required
+@transaction.atomic
+def stock_batch_cost_edit(request, pk):
+    """
+    Correct buying price for an UNTOUCHED FIFO batch.
+
+    Purchase batch:
+        Updates both PurchaseItem and StockBatch.
+
+    Opening/manual batch:
+        Updates StockBatch directly.
+
+    A batch that has already been sold/consumed is locked because
+    historical SaleAllocation cost and profit already depend on it.
+    """
+
+    batch = get_object_or_404(
+        StockBatch.objects
+        .select_for_update()
+        .select_related(
+            'product',
+            'purchase_item',
+            'purchase_item__unit',
+            'purchase_item__purchase',
+        ),
+        pk=pk,
+    )
+
+    product = batch.product
+
+    has_allocations = (
+        batch.sale_allocations.exists()
+    )
+
+    untouched = (
+        batch.quantity_remaining_base
+        == batch.quantity_received_base
+        and not has_allocations
+    )
+
+    if not untouched:
+        messages.error(
+            request,
+            (
+                'Buying price cannot be changed because '
+                'stock from this batch has already been '
+                'used or sold. Historical FIFO cost and '
+                'profit are protected.'
+            ),
+        )
+
+        return redirect(
+            'stock_detail',
+            pk=product.pk,
+        )
+
+    if batch.purchase_item_id:
+        item = batch.purchase_item
+
+        current_cost = item.cost_per_unit
+        cost_unit = item.unit.symbol
+        cost_label = (
+            f'Buying price per {item.unit.symbol}'
+        )
+    else:
+        item = None
+
+        current_cost = batch.unit_cost_base
+        cost_unit = product.base_unit
+        cost_label = (
+            f'Buying price per {product.base_unit}'
+        )
+
+    if request.method == 'POST':
+        raw_cost = (
+            request.POST
+            .get('cost_per_unit', '')
+            .strip()
+        )
+
+        if not raw_cost:
+            messages.error(
+                request,
+                'Enter the correct buying price.',
+            )
+        else:
+            try:
+                new_cost = Decimal(
+                    raw_cost.replace(',', '')
+                )
+
+                if new_cost < 0:
+                    raise ValueError
+
+            except (
+                InvalidOperation,
+                ValueError,
+            ):
+                messages.error(
+                    request,
+                    (
+                        'Enter a valid buying price '
+                        'greater than or equal to zero.'
+                    ),
+                )
+
+            else:
+                if item is not None:
+                    # Purchase buying price is entered
+                    # per selected purchase unit.
+                    total_cost = (
+                        item.quantity * new_cost
+                    ).quantize(
+                        Decimal('0.01')
+                    )
+
+                    if item.base_quantity > 0:
+                        unit_cost_base = (
+                            total_cost
+                            / item.base_quantity
+                        )
+                    else:
+                        unit_cost_base = Decimal('0')
+
+                    item.cost_per_unit = new_cost
+                    item.total_cost = total_cost
+                    item.unit_cost_base = unit_cost_base
+
+                    item.save(
+                        update_fields=[
+                            'cost_per_unit',
+                            'total_cost',
+                            'unit_cost_base',
+                        ]
+                    )
+
+                    batch.unit_cost_base = (
+                        unit_cost_base
+                    )
+
+                    batch.save(
+                        update_fields=[
+                            'unit_cost_base',
+                        ]
+                    )
+
+                else:
+                    # Opening stock / manual increase:
+                    # price is already cost per base unit.
+                    batch.unit_cost_base = new_cost
+
+                    batch.save(
+                        update_fields=[
+                            'unit_cost_base',
+                        ]
+                    )
+
+                messages.success(
+                    request,
+                    (
+                        f'Buying price for '
+                        f'{product.name} was corrected '
+                        f'successfully.'
+                    ),
+                )
+
+                return redirect(
+                    'stock_detail',
+                    pk=product.pk,
+                )
+
+    return render(
+        request,
+        'stock_cost_edit.html',
+        {
+            'batch': batch,
+            'product': product,
+            'current_cost': current_cost,
+            'cost_unit': cost_unit,
+            'cost_label': cost_label,
+        },
+    )
+
+
+@admin_required
+def opening_stock(request):
+    products_qs = Product.objects.filter(
+        is_active=True
+    ).prefetch_related(
+        'selling_units'
+    )
+
+    if request.method == 'POST':
+        product = get_object_or_404(
+            Product,
+            pk=request.POST.get('product'),
+        )
+
+        unit = get_object_or_404(
+            ProductUnit,
+            pk=request.POST.get('unit'),
+            product=product,
+        )
+
+        try:
+            qty = D(
+                request.POST.get('quantity')
+            )
+
+            cost_per_unit = D(
+                request.POST.get(
+                    'cost_per_unit',
+                    '0',
+                )
+            )
+
+            if (
+                qty <= 0
+                or cost_per_unit < 0
+            ):
+                raise StockError(
+                    (
+                        'Enter a valid opening '
+                        'quantity and cost.'
+                    )
+                )
+
+            base_qty = (
+                qty
+                * unit.conversion_to_base
+            )
+
+            cost_base = (
+                cost_per_unit
+                / unit.conversion_to_base
+            ) if unit.conversion_to_base else D('0')
+
+            add_opening_stock(
+                product=product,
+                quantity_base=base_qty,
+                unit_cost_base=cost_base,
+                reference=request.POST.get(
+                    'reference',
+                    '',
+                ),
+                user=request.user,
+            )
+
+            messages.success(
+                request,
+                (
+                    f'Opening stock added for '
+                    f'{product.name}.'
+                ),
+            )
+
+            return redirect('stock')
+
+        except StockError as exc:
+            messages.error(
+                request,
+                str(exc),
+            )
+
+    data = {
+        str(p.id): [
+            {
+                'id': u.id,
+                'name': u.name,
+                'symbol': u.symbol,
+                'conversion': str(
+                    u.conversion_to_base
+                ),
+            }
+            for u in p.selling_units.filter(
+                is_active=True
+            )
+        ]
+        for p in products_qs
+    }
+
+    return render(
+        request,
+        'opening_stock.html',
+        {
+            'products': products_qs,
+            'units_json': json.dumps(data),
+        },
+    )
+
+
+@admin_required
+@require_POST
+def opening_batch_delete(request, pk):
+    batch = get_object_or_404(
+        StockBatch,
+        pk=pk,
+        source='OPENING',
+        purchase_item__isnull=True,
+    )
+
+    if (
+        batch.reference
+        or ''
+    ).startswith('Adjustment:'):
+        messages.error(
+            request,
+            (
+                'Adjustment stock cannot be deleted '
+                'here. Create a correcting stock '
+                'adjustment instead.'
+            ),
+        )
+
+    elif (
+        batch.sale_allocations.exists()
+        or (
+            batch.quantity_remaining_base
+            != batch.quantity_received_base
+        )
+    ):
+        messages.error(
+            request,
+            (
+                'This opening batch has already been '
+                'used, so it cannot be deleted. '
+                'Use a stock adjustment instead.'
+            ),
+        )
+
+    else:
+        product_name = batch.product.name
+        batch.delete()
+
+        messages.success(
+            request,
+            (
+                f'Unused opening stock for '
+                f'{product_name} was removed.'
+            ),
+        )
+
+    return redirect('stock')
+
+
+@admin_required
+def stock_adjust(request):
+    if request.method == 'POST':
+        product = get_object_or_404(
+            Product,
+            pk=request.POST.get('product'),
+        )
+
+        adjustment_type = request.POST.get(
+            'adjustment_type'
+        )
+
+        reason = request.POST.get(
+            'reason',
+            'Stock adjustment',
+        ).strip()
+
+        try:
+            if adjustment_type == 'decrease':
+                decrease_stock_fifo(
+                    product=product,
+                    quantity=request.POST.get(
+                        'quantity'
+                    ),
+                    user=request.user,
+                    reason=reason,
+                )
+
+            else:
+                increase_stock(
+                    product=product,
+                    quantity=request.POST.get(
+                        'quantity'
+                    ),
+                    unit_cost_base=request.POST.get(
+                        'unit_cost',
+                        '0',
+                    ),
+                    user=request.user,
+                    reason=reason,
+                )
+
+            messages.success(
+                request,
+                'Stock adjustment saved.',
+            )
+
+            return redirect('stock')
+
+        except StockError as exc:
+            messages.error(
+                request,
+                str(exc),
+            )
+
+    return render(
+        request,
+        'stock_adjust.html',
+        {
+            'products': Product.objects.filter(
+                is_active=True
+            ),
+        },
+    )
 
 
 @admin_required

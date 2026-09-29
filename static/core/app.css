@@ -3429,3 +3429,438 @@ canvas{
     font-size: 8.5px;
     line-height: 1.45;
 }
+
+/* ========================================================================== */
+/* STOCK CONTROL - BUYING PRICE / FIFO DETAIL                                 */
+/* ========================================================================== */
+
+.stock-cost-number{
+    display:block;
+    color:#29272a;
+    font-weight:650;
+}
+
+.stock-product-link{
+    text-decoration:none;
+}
+
+.stock-product-link:hover{
+    text-decoration:underline;
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Stock detail summary                                                       */
+/* -------------------------------------------------------------------------- */
+
+.stock-detail-summary{
+    display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:10px;
+    margin-bottom:12px;
+}
+
+.stock-stat-card{
+    min-width:0;
+    padding:16px;
+}
+
+.stock-stat-label{
+    display:block;
+    margin-bottom:8px;
+    color:#81858c;
+    font-size:10px;
+    font-weight:600;
+    letter-spacing:.035em;
+    text-transform:uppercase;
+}
+
+.stock-stat-value{
+    display:block;
+    color:#26282c;
+    font-size:21px;
+    line-height:1.15;
+    font-weight:650;
+    overflow-wrap:anywhere;
+}
+
+.stock-stat-card small{
+    display:block;
+    margin-top:4px;
+    color:#858a92;
+    font-size:9.5px;
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Product information                                                        */
+/* -------------------------------------------------------------------------- */
+
+.stock-product-info{
+    display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:0;
+    border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line);
+}
+
+.stock-product-info>div{
+    min-width:0;
+    padding:14px 16px;
+    border-right:1px solid var(--line);
+}
+
+.stock-product-info>div:last-child{
+    border-right:0;
+}
+
+.stock-product-info span{
+    display:block;
+    margin-bottom:5px;
+    color:#888d94;
+    font-size:9px;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+}
+
+.stock-product-info strong{
+    display:block;
+    color:#292b30;
+    font-size:11px;
+    font-weight:600;
+    overflow-wrap:anywhere;
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Selling units                                                              */
+/* -------------------------------------------------------------------------- */
+
+.stock-selling-units{
+    padding:16px;
+}
+
+.stock-unit-list{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:8px;
+}
+
+.stock-unit-item{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    min-width:0;
+    padding:10px 11px;
+    border:1px solid var(--line);
+    border-radius:8px;
+    background:#fafafa;
+}
+
+.stock-unit-item>div{
+    min-width:0;
+}
+
+.stock-unit-item strong{
+    display:block;
+    color:#2b2d31;
+    font-size:10.5px;
+    font-weight:600;
+    overflow-wrap:anywhere;
+}
+
+.stock-unit-item small{
+    display:block;
+    margin-top:2px;
+    color:#888c93;
+    font-size:8.5px;
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Cost note                                                                  */
+/* -------------------------------------------------------------------------- */
+
+.stock-cost-note{
+    margin:0 14px 12px;
+    padding:11px 12px;
+    border:1px solid #e2e5e9;
+    border-radius:8px;
+    background:#fafbfc;
+}
+
+.stock-cost-note strong{
+    display:block;
+    margin-bottom:4px;
+    color:#303237;
+    font-size:10.5px;
+    font-weight:650;
+}
+
+.stock-cost-note p{
+    margin:0;
+    color:#757b84;
+    font-size:9.5px;
+    line-height:1.55;
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Locked price state                                                         */
+/* -------------------------------------------------------------------------- */
+
+.stock-cost-locked{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-height:26px;
+    padding:4px 8px;
+    border:1px solid #e0e2e5;
+    border-radius:6px;
+    background:#f5f6f7;
+    color:#8b8f95;
+    font-size:8.5px;
+    font-weight:600;
+    white-space:nowrap;
+}
+
+.stock-locked-wrap{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    gap:3px;
+}
+
+.stock-locked-wrap small{
+    color:#969aa0;
+    font-size:8px;
+    white-space:nowrap;
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Cost editor                                                                */
+/* -------------------------------------------------------------------------- */
+
+.stock-cost-edit-layout{
+    display:grid;
+    grid-template-columns:minmax(0,1.4fr) minmax(280px,.6fr);
+    gap:12px;
+    align-items:start;
+}
+
+.stock-edit-product{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:10px 0;
+    border-bottom:1px solid var(--line);
+}
+
+.stock-edit-product span{
+    color:#7f848c;
+    font-size:9.5px;
+}
+
+.stock-edit-product strong{
+    color:#2b2d31;
+    font-size:10.5px;
+    font-weight:600;
+    text-align:right;
+}
+
+.stock-price-field{
+    display:block;
+    margin-top:16px;
+}
+
+.stock-price-field>span{
+    display:block;
+    margin-bottom:6px;
+    color:#464a50;
+    font-size:10px;
+    font-weight:600;
+}
+
+.stock-price-field>small{
+    display:block;
+    margin-top:5px;
+    color:#888d94;
+    font-size:8.8px;
+}
+
+.stock-price-input-wrap{
+    display:flex;
+    align-items:center;
+    overflow:hidden;
+    border:1px solid var(--line);
+    border-radius:8px;
+    background:#fff;
+}
+
+.stock-price-input-wrap:focus-within{
+    border-color:#b9bec6;
+}
+
+.stock-price-input-wrap .form-control{
+    flex:1;
+    min-width:0;
+    border:0!important;
+    border-radius:0!important;
+    box-shadow:none!important;
+}
+
+.stock-price-input-wrap>span{
+    padding:0 12px;
+    color:#7f848c;
+    font-size:9px;
+    font-weight:600;
+    border-left:1px solid var(--line);
+}
+
+.stock-safe-edit-note{
+    margin-top:16px;
+    padding:11px 12px;
+    border:1px solid #dde6df;
+    border-radius:8px;
+    background:#fafcfb;
+}
+
+.stock-safe-edit-note strong{
+    display:block;
+    margin-bottom:4px;
+    color:#343a36;
+    font-size:10px;
+    font-weight:650;
+}
+
+.stock-safe-edit-note p{
+    margin:0;
+    color:#737a75;
+    font-size:9px;
+    line-height:1.5;
+}
+
+.stock-cost-side{
+    min-width:0;
+}
+
+.purchase-stock-action{
+    align-items:center!important;
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Tablet                                                                     */
+/* -------------------------------------------------------------------------- */
+
+@media(max-width:1050px){
+
+    .stock-detail-summary{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+    }
+
+    .stock-product-info{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+    }
+
+    .stock-product-info>div:nth-child(2){
+        border-right:0;
+    }
+
+    .stock-product-info>div:nth-child(-n+2){
+        border-bottom:1px solid var(--line);
+    }
+
+    .stock-unit-list{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+    }
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Mobile                                                                     */
+/* -------------------------------------------------------------------------- */
+
+@media(max-width:720px){
+
+    .stock-detail-summary{
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:7px;
+    }
+
+    .stock-stat-card{
+        padding:12px;
+    }
+
+    .stock-stat-value{
+        font-size:17px;
+    }
+
+    .stock-product-info{
+        grid-template-columns:1fr 1fr;
+    }
+
+    .stock-product-info>div{
+        padding:11px;
+    }
+
+    .stock-unit-list{
+        grid-template-columns:1fr;
+    }
+
+    .stock-cost-edit-layout{
+        grid-template-columns:1fr;
+    }
+
+    .stock-cost-side{
+        order:2;
+    }
+
+    .stock-history-table{
+        min-width:1000px;
+    }
+
+    .stock-main-table{
+        min-width:920px;
+    }
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* Small phones                                                               */
+/* -------------------------------------------------------------------------- */
+
+@media(max-width:460px){
+
+    .stock-detail-summary{
+        grid-template-columns:1fr 1fr;
+    }
+
+    .stock-stat-label{
+        font-size:8px;
+    }
+
+    .stock-stat-value{
+        font-size:15px;
+    }
+
+    .stock-product-info{
+        grid-template-columns:1fr;
+    }
+
+    .stock-product-info>div{
+        border-right:0;
+        border-bottom:1px solid var(--line);
+    }
+
+    .stock-product-info>div:last-child{
+        border-bottom:0;
+    }
+
+    .stock-locked-wrap{
+        align-items:flex-start;
+    }
+}
